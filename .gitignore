@@ -1,5 +1,5 @@
-# Binaries
-gateway
+# Binaries (root directory only)
+/gateway
 *.exe
 *.exe~
 *.dll
