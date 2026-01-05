@@ -41,7 +41,7 @@ The gateway can be configured via command-line flags or environment variables:
 | Flag | Environment Variable | Default | Description |
 |------|---------------------|---------|-------------|
 | `--http-port` | `HTTP_PORT` | `8080` | HTTP server port |
-| `--db-url` | `DB_URL` | `postgres://root@localhost:26257/defaultdb?sslmode=disable` | Database connection URL |
+| `--db-url` | `DB_URL` | `postgres://root@localhost:26257/frkrdb?sslmode=disable` | Database connection URL |
 | `--broker-url` | `BROKER_URL` | `localhost:19092` | Kafka-compatible broker URL |
 
 ## Usage

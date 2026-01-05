@@ -34,7 +34,7 @@ func main() {
 	if *dbURL == "" {
 		*dbURL = os.Getenv("DB_URL")
 		if *dbURL == "" {
-			*dbURL = "postgres://root@localhost:26257/defaultdb?sslmode=disable"
+			*dbURL = "postgres://root@localhost:26257/frkrdb?sslmode=disable"
 		}
 	}
 
