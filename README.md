@@ -1,6 +1,6 @@
 # frkr-ingest-gateway
 
-Ingest Gateway service for the frkr Traffic Mirroring Platform.
+Ingest Gateway service for frkr.
 
 ## Overview
 
