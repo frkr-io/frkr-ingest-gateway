@@ -3,7 +3,7 @@ module github.com/frkr-io/frkr-ingest-gateway
 go 1.24.0
 
 require (
-	github.com/frkr-io/frkr-common v0.1.0
+	github.com/frkr-io/frkr-common v0.1.1
 	github.com/lib/pq v1.10.9
 	github.com/segmentio/kafka-go v0.4.49
 )
