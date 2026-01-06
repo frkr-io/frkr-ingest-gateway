@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"flag"
@@ -9,87 +10,110 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/frkr-io/frkr-common/auth"
 	dbcommon "github.com/frkr-io/frkr-common/db"
+	"github.com/frkr-io/frkr-common/gateway"
 	"github.com/frkr-io/frkr-common/messages"
-	_ "github.com/lib/pq"
+	_ "github.com/lib/pq" // PostgreSQL driver registration
 	"github.com/segmentio/kafka-go"
 )
 
+const (
+	ServiceName = "frkr-ingest-gateway"
+	Version     = "0.1.0"
+)
+
 var (
-	httpPort    = flag.Int("http-port", 8080, "HTTP server port")
-	dbURL       = flag.String("db-url", "", "Postgres-compatible database connection URL")
-	brokerURL = flag.String("broker-url", "localhost:19092", "Broker URL (Kafka Protocol compliant)")
+	httpPort  = flag.Int("http-port", 8080, "HTTP server port")
+	dbURL     = flag.String("db-url", "", "Postgres-compatible database connection URL (required)")
+	brokerURL = flag.String("broker-url", "", "Broker URL (Kafka Protocol compliant, required)")
 )
 
 func main() {
 	flag.Parse()
 
-	// Check environment variables if flags not set
-	if *dbURL == "" {
-		*dbURL = os.Getenv("DB_URL")
-		if *dbURL == "" {
-			*dbURL = "postgres://root@localhost:26257/frkrdb?sslmode=disable"
-		}
+	// Load and validate configuration (12-factor app pattern)
+	cfg := &gateway.Config{
+		HTTPPort:  *httpPort,
+		DBURL:     *dbURL,
+		BrokerURL: *brokerURL,
 	}
+	gateway.MustLoadConfig(cfg)
 
-	if *brokerURL == "localhost:19092" {
-		if envURL := os.Getenv("BROKER_URL"); envURL != "" {
-			*brokerURL = envURL
-		}
-	}
-
-	if *httpPort == 8080 {
-		if envPort := os.Getenv("HTTP_PORT"); envPort != "" {
-			if port, err := strconv.Atoi(envPort); err == nil {
-				*httpPort = port
-			}
-		}
-	}
-
-	// Connect to database
-	if *dbURL == "" {
-		log.Fatal("DB_URL environment variable or flag is required")
-	}
-	db, err := sql.Open("postgres", *dbURL)
+	// Initialize database connection
+	db, err := sql.Open("postgres", cfg.DBURL)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.Fatalf("Failed to open database connection: %v", err)
 	}
 	defer db.Close()
 
-	if err := db.Ping(); err != nil {
-		log.Fatalf("Failed to ping database: %v", err)
-	}
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
 
-	// Validate broker URL
-	if *brokerURL == "" || *brokerURL == "localhost:19092" {
-		if envURL := os.Getenv("BROKER_URL"); envURL == "" {
-			log.Fatal("BROKER_URL environment variable or flag is required")
-		}
-	}
-
-	// Create writer for broker (Kafka Protocol compliant)
+	// Create Kafka writer
 	writer := &kafka.Writer{
-		Addr:         kafka.TCP(*brokerURL),
+		Addr:         kafka.TCP(cfg.BrokerURL),
 		Balancer:     &kafka.LeastBytes{},
 		WriteTimeout: 10 * time.Second,
 	}
 	defer writer.Close()
 
-	// HTTP handlers
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
-	})
+	// Create health checker and start background health checks
+	healthChecker := gateway.NewHealthChecker(ServiceName, Version)
+	healthChecker.StartHealthCheckLoop(db, cfg.BrokerURL)
 
-	http.HandleFunc("/ingest", func(w http.ResponseWriter, r *http.Request) {
+	// Set up HTTP handlers
+	mux := http.NewServeMux()
+
+	// Register standard health endpoints from shared package
+	healthChecker.RegisterHealthEndpoints(mux, cfg.HTTPPort, cfg.DBURL, cfg.BrokerURL)
+
+	// Business endpoint
+	mux.HandleFunc("/ingest", makeIngestHandler(db, writer, cfg.BrokerURL, healthChecker))
+
+	// Start server
+	server := &http.Server{
+		Addr:    fmt.Sprintf(":%d", cfg.HTTPPort),
+		Handler: mux,
+	}
+
+	go func() {
+		log.Printf("Starting %s v%s on port %d", ServiceName, Version, cfg.HTTPPort)
+		log.Printf("  Database: %s", gateway.SanitizeURL(cfg.DBURL))
+		log.Printf("  Broker:   %s", cfg.BrokerURL)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("HTTP server failed: %v", err)
+		}
+	}()
+
+	// Wait for interrupt
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	<-sigChan
+
+	log.Println("Shutting down...")
+
+	// Graceful shutdown
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_ = server.Shutdown(ctx)
+}
+
+func makeIngestHandler(db *sql.DB, writer *kafka.Writer, brokerURL string, hc *gateway.HealthChecker) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Check if we're ready
+		if !hc.IsReady() {
+			http.Error(w, "Service unavailable - dependencies not ready", http.StatusServiceUnavailable)
 			return
 		}
 
@@ -108,7 +132,6 @@ func main() {
 		}
 
 		// Get stream topic from database
-		// This validates that the stream exists and returns the authorized topic name
 		topic, err := dbcommon.GetStreamTopic(db, req.StreamID)
 		if err != nil {
 			log.Printf("Failed to get stream topic: %v", err)
@@ -131,25 +154,16 @@ func main() {
 		})
 		if err != nil {
 			log.Printf("Failed to write to broker: %v", err)
-			// Check if it's a topic not found error
-			// Note: Topic auto-creation is only safe here because:
-			// 1. User is already authenticated (checked above)
-			// 2. Stream exists and topic name comes from database (not user input)
-			// 3. Topic name matches the authorized stream's topic
 			errStr := err.Error()
-			log.Printf("Error string: %s", errStr)
 			if strings.Contains(errStr, "Unknown Topic") || strings.Contains(errStr, "does not exist") || strings.Contains(errStr, "UnknownTopic") || strings.Contains(errStr, "topic or partition") {
 				// Try to create the topic
-				// Security: Topic name comes from database (GetStreamTopic above), not user input
-				// Only create if stream exists and user is authorized (both checked above)
-				log.Printf("Topic %s not found for authorized stream %s, attempting to create it...", topic, req.StreamID)
-				if createErr := createTopicIfNotExists(*brokerURL, topic); createErr != nil {
+				log.Printf("Topic %s not found for stream %s, attempting to create it...", topic, req.StreamID)
+				if createErr := gateway.CreateTopicIfNotExists(brokerURL, topic); createErr != nil {
 					log.Printf("Failed to create topic %s: %v", topic, createErr)
 					http.Error(w, fmt.Sprintf("Topic not found and creation failed: %v", createErr), http.StatusInternalServerError)
 					return
 				}
-				// Retry the write after creating the topic
-				log.Printf("Topic %s created successfully, retrying write...", topic)
+				// Retry the write
 				err = writer.WriteMessages(r.Context(), kafka.Message{
 					Topic: topic,
 					Key:   []byte(req.Request.RequestID),
@@ -167,71 +181,6 @@ func main() {
 		}
 
 		w.WriteHeader(http.StatusAccepted)
-		w.Write([]byte("OK"))
-	})
-
-	// Start server
-	server := &http.Server{
-		Addr: fmt.Sprintf(":%d", *httpPort),
+		_, _ = w.Write([]byte("OK"))
 	}
-
-	go func() {
-		log.Printf("Starting Ingest Gateway on port %d", *httpPort)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("HTTP server failed: %v", err)
-		}
-	}()
-
-	// Wait for interrupt
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	<-sigChan
-
-	log.Println("Shutting down...")
-	server.Close()
 }
-
-// createTopicIfNotExists creates a topic if it doesn't exist (Kafka Protocol compliant).
-// Security: This function should only be called after:
-// 1. User authentication has been verified (ValidateBasicAuthForStream)
-// 2. Stream existence has been validated (GetStreamTopic)
-// 3. Topic name comes from the database (not user input)
-func createTopicIfNotExists(brokerURL, topicName string) error {
-	conn, err := kafka.Dial("tcp", brokerURL)
-	if err != nil {
-		return fmt.Errorf("failed to connect to broker: %w", err)
-	}
-	defer conn.Close()
-
-	controller, err := conn.Controller()
-	if err != nil {
-		return fmt.Errorf("failed to get controller: %w", err)
-	}
-
-	controllerConn, err := kafka.Dial("tcp", fmt.Sprintf("%s:%d", controller.Host, controller.Port))
-	if err != nil {
-		return fmt.Errorf("failed to connect to controller: %w", err)
-	}
-	defer controllerConn.Close()
-
-	topicConfigs := []kafka.TopicConfig{
-		{
-			Topic:             topicName,
-			NumPartitions:     1,
-			ReplicationFactor: 1,
-		},
-	}
-
-	err = controllerConn.CreateTopics(topicConfigs...)
-	if err != nil {
-		// Topic might already exist, which is fine
-		errStr := err.Error()
-		if strings.Contains(errStr, "already exists") || strings.Contains(errStr, "TOPIC_ALREADY_EXISTS") {
-			return nil
-		}
-		return fmt.Errorf("failed to create topic: %w", err)
-	}
-
-	return nil
-}
-
