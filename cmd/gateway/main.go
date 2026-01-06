@@ -53,6 +53,9 @@ func main() {
 	}
 
 	// Connect to database
+	if *dbURL == "" {
+		log.Fatal("DB_URL environment variable or flag is required")
+	}
 	db, err := sql.Open("postgres", *dbURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
@@ -61,6 +64,13 @@ func main() {
 
 	if err := db.Ping(); err != nil {
 		log.Fatalf("Failed to ping database: %v", err)
+	}
+
+	// Validate broker URL
+	if *brokerURL == "" || *brokerURL == "localhost:19092" {
+		if envURL := os.Getenv("BROKER_URL"); envURL == "" {
+			log.Fatal("BROKER_URL environment variable or flag is required")
+		}
 	}
 
 	// Create writer for broker (Kafka Protocol compliant)
