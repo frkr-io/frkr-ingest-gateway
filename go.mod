@@ -6,6 +6,8 @@ require (
 	github.com/frkr-io/frkr-common v0.1.9
 	github.com/lib/pq v1.10.9
 	github.com/segmentio/kafka-go v0.4.49
+	github.com/stretchr/testify v1.11.1
+	golang.org/x/crypto v0.44.0
 )
 
 require (
@@ -56,7 +58,6 @@ require (
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/shirou/gopsutil/v4 v4.25.6 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
-	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/testcontainers/testcontainers-go v0.40.0 // indirect
 	github.com/testcontainers/testcontainers-go/modules/cockroachdb v0.40.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
@@ -68,7 +69,6 @@ require (
 	go.opentelemetry.io/otel/metric v1.38.0 // indirect
 	go.opentelemetry.io/otel/trace v1.38.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
-	golang.org/x/crypto v0.44.0 // indirect
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.38.0 // indirect
@@ -76,5 +76,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-// For local development, uncomment the line below:
-// replace github.com/frkr-io/frkr-common => ../frkr-common
+// For local development, use local path
+replace github.com/frkr-io/frkr-common => ../frkr-common
