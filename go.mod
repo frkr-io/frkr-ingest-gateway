@@ -4,6 +4,7 @@ go 1.24.0
 
 require (
 	github.com/frkr-io/frkr-common v0.1.14
+	github.com/lib/pq v1.10.9
 	github.com/segmentio/kafka-go v0.4.49
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.44.0
