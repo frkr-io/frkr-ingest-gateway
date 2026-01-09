@@ -43,7 +43,7 @@ func NewIngestGateway(authPlugin plugins.AuthPlugin, secretPlugin plugins.Secret
 }
 
 // Start starts the gateway server
-func (g *IngestGateway) Start(cfg *gateway.Config, db *sql.DB, writer *kafka.Writer) error {
+func (g *IngestGateway) Start(cfg *gateway.GatewayBaseConfig, db *sql.DB, writer *kafka.Writer) error {
 	// Build broker URL for health checks
 	var brokerURL string
 	if cfg.BrokerURL != "" {
@@ -77,11 +77,11 @@ func (g *IngestGateway) Start(cfg *gateway.Config, db *sql.DB, writer *kafka.Wri
 	}
 
 	// Create health checker and start background health checks
-	healthChecker := gateway.NewHealthChecker(ServiceName, Version)
+	healthChecker := gateway.NewGatewayHealthChecker(ServiceName, Version)
 	healthChecker.StartHealthCheckLoop(db, brokerURL)
 
 	// Create and configure server with injected plugins
-	srv := server.NewServer(db, writer, brokerURL, healthChecker, g.authPlugin, g.secretPlugin)
+	srv := server.NewIngestGatewayServer(db, writer, brokerURL, healthChecker, g.authPlugin, g.secretPlugin)
 
 	// Set up HTTP handlers
 	mux := http.NewServeMux()

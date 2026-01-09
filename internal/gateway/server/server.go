@@ -10,26 +10,26 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
-// Server holds the gateway server dependencies
-type Server struct {
+// IngestGatewayServer holds the gateway server dependencies
+type IngestGatewayServer struct {
 	DB            *sql.DB
 	Writer        *kafka.Writer
 	BrokerURL     string
-	HealthChecker *gateway.HealthChecker
+	HealthChecker *gateway.GatewayHealthChecker
 	AuthPlugin    plugins.AuthPlugin
 	SecretPlugin  plugins.SecretPlugin
 }
 
-// NewServer creates a new ingest gateway server
-func NewServer(
+// NewIngestGatewayServer creates a new ingest gateway server
+func NewIngestGatewayServer(
 	db *sql.DB,
 	writer *kafka.Writer,
 	brokerURL string,
-	healthChecker *gateway.HealthChecker,
+	healthChecker *gateway.GatewayHealthChecker,
 	authPlugin plugins.AuthPlugin,
 	secretPlugin plugins.SecretPlugin,
-) *Server {
-	return &Server{
+) *IngestGatewayServer {
+	return &IngestGatewayServer{
 		DB:            db,
 		Writer:        writer,
 		BrokerURL:     brokerURL,
@@ -40,7 +40,7 @@ func NewServer(
 }
 
 // SetupHandlers registers all HTTP handlers on the provided mux
-func (s *Server) SetupHandlers(mux *http.ServeMux, cfg *gateway.Config) {
+func (s *IngestGatewayServer) SetupHandlers(mux *http.ServeMux, cfg *gateway.GatewayBaseConfig) {
 	// Build URLs for health endpoints
 	var dbURL string
 	if cfg.DBURL != "" {
@@ -67,3 +67,5 @@ func (s *Server) SetupHandlers(mux *http.ServeMux, cfg *gateway.Config) {
 	// Business endpoint
 	mux.HandleFunc("/ingest", s.IngestHandler())
 }
+
+

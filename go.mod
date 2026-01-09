@@ -3,8 +3,7 @@ module github.com/frkr-io/frkr-ingest-gateway
 go 1.24.0
 
 require (
-	github.com/frkr-io/frkr-common v0.1.10
-	github.com/lib/pq v1.10.9
+	github.com/frkr-io/frkr-common v0.1.14
 	github.com/segmentio/kafka-go v0.4.49
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.44.0
@@ -40,6 +39,7 @@ require (
 	github.com/jackc/pgx/v5 v5.5.4 // indirect
 	github.com/jackc/puddle/v2 v2.2.1 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
+	github.com/lib/pq v1.10.9 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
@@ -77,4 +77,3 @@ require (
 )
 
 // For local development, use local path
-replace github.com/frkr-io/frkr-common => ../frkr-common

@@ -50,7 +50,7 @@ func TestIngestGateway_Start(t *testing.T) {
 	gw, err := NewIngestGateway(authPlugin, secretPlugin)
 	require.NoError(t, err)
 
-	cfg := &gateway.Config{
+	cfg := &gateway.GatewayBaseConfig{
 		HTTPPort:  0, // Use port 0 for random port in tests
 		BrokerURL: "localhost:9092",
 	}

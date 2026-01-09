@@ -14,7 +14,7 @@ import (
 )
 
 // IngestHandler handles POST /ingest requests
-func (s *Server) IngestHandler() http.HandlerFunc {
+func (s *IngestGatewayServer) IngestHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// TODO: Is there a better way to do this? Maybe HTTP method annotations that are enforced by middleware?
 		if r.Method != http.MethodPost {
