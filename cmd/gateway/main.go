@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"os"
 
 	gwcommon "github.com/frkr-io/frkr-common/gateway"
 	"github.com/frkr-io/frkr-common/plugins"
@@ -29,15 +28,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	var authPlugin plugins.AuthPlugin
-	authType := os.Getenv("AUTH_TYPE")
-	if authType == "oidc" {
-		log.Println("Using TrustedHeaderAuthPlugin (OIDC mode)")
-		authPlugin = gateway.NewTrustedHeaderAuthPlugin(db)
-	} else {
-		log.Println("Using BasicAuthPlugin")
-		authPlugin = plugins.NewBasicAuthPlugin(db)
-	}
+	// Initialize Auth Plugins with Composite
+	basicAuth := plugins.NewBasicAuthPlugin(db)
+	oidcAuth := gateway.NewTrustedHeaderAuthPlugin(db)
+	log.Println("Using CompositeAuthPlugin (Basic + OIDC)")
+	authPlugin := plugins.NewCompositeAuthPlugin(basicAuth, oidcAuth)
 
 	gw, err := gateway.NewIngestGateway(authPlugin, secretPlugin)
 	if err != nil {

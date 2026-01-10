@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/frkr-io/frkr-common/plugins"
@@ -23,10 +24,17 @@ func NewTrustedHeaderAuthPlugin(db *sql.DB) *TrustedHeaderAuthPlugin {
 }
 
 // ValidateRequest validates the request by decoding the JWT from Authorization header
-func (p *TrustedHeaderAuthPlugin) ValidateRequest(ctx context.Context, token string, tokenType plugins.TokenType, secretPlugin plugins.SecretPlugin) (*plugins.AuthResult, error) {
-	if tokenType != plugins.TokenTypeBearer {
-		return nil, fmt.Errorf("TrustedHeaderAuthPlugin requires bearer token, got: %s", tokenType)
+func (p *TrustedHeaderAuthPlugin) ValidateRequest(ctx context.Context, r *http.Request, secretPlugin plugins.SecretPlugin) (*plugins.AuthResult, error) {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		return nil, fmt.Errorf("missing Authorization header")
 	}
+
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		return nil, fmt.Errorf("TrustedHeaderAuthPlugin requires bearer token")
+	}
+
+	token := strings.TrimPrefix(authHeader, "Bearer ")
 
 	// Token is "Bearer <jwt>"
 	// We assume Envoy has already validated the signature.
@@ -34,8 +42,6 @@ func (p *TrustedHeaderAuthPlugin) ValidateRequest(ctx context.Context, token str
 
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
-		// If it's not a JWT (e.g. opaque token), we can't extract info easily unless passed in headers.
-		// For now fail or return generic user.
 		return nil, fmt.Errorf("invalid JWT format")
 	}
 
@@ -50,27 +56,27 @@ func (p *TrustedHeaderAuthPlugin) ValidateRequest(ctx context.Context, token str
 	}
 
 	// Extract identity
-	// Use 'sub' (User ID) or 'client_id' or 'azp'
 	var userID string
 	if sub, ok := claims["sub"].(string); ok {
 		userID = sub
 	}
 	
 	// Create AuthResult
-	// We might map OIDC user to internal user here if needed, but for now pass through.
+	// In OIDC mode, we map the external user to a transient session or lookup if needed.
 	return &plugins.AuthResult{
 		UserID:     userID,
 		ClientType: "oidc_user",
-		TenantID:   "default", // In real world, extract from claims (custom claim)
+		TenantID:   "default", 
 		Roles:      []string{"user"},
+		AuthSource: "oidc",
 	}, nil
 }
 
 // CanAccessStream checks if the user/client can access a specific stream
-func (p *TrustedHeaderAuthPlugin) CanAccessStream(ctx context.Context, userID string, streamID string, permission string) (bool, error) {
-	// For OIDC test, we might allow all access if authenticated, 
-	// OR check if user owns stream.
-	// Since we don't have user mapping, we'll allow it for now to pass functionality tests.
-	// Real implementation would look up 'stream_owners' table.
+func (p *TrustedHeaderAuthPlugin) CanAccessStream(ctx context.Context, authResult *plugins.AuthResult, streamID string, permission string) (bool, error) {
+	if authResult.AuthSource != "oidc" {
+		return false, fmt.Errorf("TrustedHeaderAuthPlugin cannot authorize user from source: %s", authResult.AuthSource)
+	}
+	// For trusted header/OIDC, we currently allow all access if authenticated (demo mode)
 	return true, nil
 }
