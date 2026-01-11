@@ -9,7 +9,7 @@ import (
 
 	dbcommon "github.com/frkr-io/frkr-common/db"
 	"github.com/frkr-io/frkr-common/gateway"
-	"github.com/frkr-io/frkr-common/messages"
+	ingestv1 "github.com/frkr-io/frkr-proto/go/ingest/v1"
 	"github.com/segmentio/kafka-go"
 )
 
@@ -29,7 +29,7 @@ func (s *IngestGatewayServer) IngestHandler() http.HandlerFunc {
 		}
 
 		// Parse request
-		var req messages.IngestRequest
+		var req ingestv1.IngestRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, fmt.Sprintf("Invalid request: %v", err), http.StatusBadRequest)
 			return
@@ -37,7 +37,7 @@ func (s *IngestGatewayServer) IngestHandler() http.HandlerFunc {
 
 		// Authenticate and authorize
 		ctx := r.Context()
-		_, err := gateway.AuthenticateHTTPRequest(ctx, r, s.AuthPlugin, s.SecretPlugin, req.StreamID, "write")
+		_, err := gateway.AuthenticateHTTPRequest(ctx, r, s.AuthPlugin, s.SecretPlugin, req.StreamId, "write")
 		if err != nil {
 			log.Printf("Authentication failed: %v", err)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -45,7 +45,7 @@ func (s *IngestGatewayServer) IngestHandler() http.HandlerFunc {
 		}
 
 		// Get stream topic from database
-		topic, err := dbcommon.GetStreamTopic(s.DB, req.StreamID)
+		topic, err := dbcommon.GetStreamTopic(s.DB, req.StreamId)
 		if err != nil {
 			log.Printf("Failed to get stream topic: %v", err)
 			http.Error(w, "Stream not found", http.StatusNotFound)
@@ -62,7 +62,7 @@ func (s *IngestGatewayServer) IngestHandler() http.HandlerFunc {
 		// Write to broker
 		err = s.Writer.WriteMessages(r.Context(), kafka.Message{
 			Topic: topic,
-			Key:   []byte(req.Request.RequestID),
+			Key:   []byte(req.Request.RequestId),
 			Value: messageData,
 		})
 		if err != nil {
@@ -70,7 +70,7 @@ func (s *IngestGatewayServer) IngestHandler() http.HandlerFunc {
 			errStr := err.Error()
 			if strings.Contains(errStr, "Unknown Topic") || strings.Contains(errStr, "does not exist") || strings.Contains(errStr, "UnknownTopic") || strings.Contains(errStr, "topic or partition") {
 				// Try to create the topic
-				log.Printf("Topic %s not found for stream %s, attempting to create it...", topic, req.StreamID)
+				log.Printf("Topic %s not found for stream %s, attempting to create it...", topic, req.StreamId)
 				if createErr := gateway.CreateTopicIfNotExists(s.BrokerURL, topic); createErr != nil {
 					log.Printf("Failed to create topic %s: %v", topic, createErr)
 					http.Error(w, fmt.Sprintf("Topic not found and creation failed: %v", createErr), http.StatusInternalServerError)
@@ -79,7 +79,7 @@ func (s *IngestGatewayServer) IngestHandler() http.HandlerFunc {
 				// Retry the write
 				err = s.Writer.WriteMessages(r.Context(), kafka.Message{
 					Topic: topic,
-					Key:   []byte(req.Request.RequestID),
+					Key:   []byte(req.Request.RequestId),
 					Value: messageData,
 				})
 				if err != nil {

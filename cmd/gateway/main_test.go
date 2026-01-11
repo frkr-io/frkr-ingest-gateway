@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/frkr-io/frkr-ingest-gateway/internal/gateway/server"
 	"github.com/frkr-io/frkr-common/db"
 	dbcommon "github.com/frkr-io/frkr-common/db"
 	"github.com/frkr-io/frkr-common/gateway"
-	"github.com/frkr-io/frkr-common/messages"
 	"github.com/frkr-io/frkr-common/plugins"
+	"github.com/frkr-io/frkr-ingest-gateway/internal/gateway/server"
+	ingestv1 "github.com/frkr-io/frkr-proto/go/ingest/v1"
 	"github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -92,10 +92,10 @@ func TestIngestGateway_AuthenticatedRequest(t *testing.T) {
 	handler := mux.ServeHTTP
 
 	t.Run("successful authenticated request", func(t *testing.T) {
-		reqBody := messages.IngestRequest{
-			StreamID: stream.Name, // GetStreamTopic expects stream name
-			Request: messages.MirroredRequest{
-				RequestID: "test-request-123",
+		reqBody := ingestv1.IngestRequest{
+			StreamId: stream.Name, // GetStreamTopic expects stream name
+			Request: &ingestv1.MirroredRequest{
+				RequestId: "test-request-123",
 				Method:    "GET",
 				Path:      "/api/test",
 				Headers:   map[string]string{"Content-Type": "application/json"},
@@ -120,10 +120,10 @@ func TestIngestGateway_AuthenticatedRequest(t *testing.T) {
 	})
 
 	t.Run("unauthorized - missing auth header", func(t *testing.T) {
-		reqBody := messages.IngestRequest{
-			StreamID: stream.Name,
-			Request: messages.MirroredRequest{
-				RequestID: "test-request-456",
+		reqBody := ingestv1.IngestRequest{
+			StreamId: stream.Name,
+			Request: &ingestv1.MirroredRequest{
+				RequestId: "test-request-456",
 				Method:    "GET",
 				Path:      "/api/test",
 			},
@@ -139,10 +139,10 @@ func TestIngestGateway_AuthenticatedRequest(t *testing.T) {
 	})
 
 	t.Run("unauthorized - invalid credentials", func(t *testing.T) {
-		reqBody := messages.IngestRequest{
-			StreamID: stream.Name,
-			Request: messages.MirroredRequest{
-				RequestID: "test-request-789",
+		reqBody := ingestv1.IngestRequest{
+			StreamId: stream.Name,
+			Request: &ingestv1.MirroredRequest{
+				RequestId: "test-request-789",
 				Method:    "GET",
 				Path:      "/api/test",
 			},
@@ -167,10 +167,10 @@ func TestIngestGateway_AuthenticatedRequest(t *testing.T) {
 		otherStream, err := dbcommon.CreateStream(testDB, otherTenant.ID, "other-stream", "Other", 7)
 		require.NoError(t, err)
 
-		reqBody := messages.IngestRequest{
-			StreamID: otherStream.Name,
-			Request: messages.MirroredRequest{
-				RequestID: "test-request-cross-tenant",
+		reqBody := ingestv1.IngestRequest{
+			StreamId: otherStream.Name,
+			Request: &ingestv1.MirroredRequest{
+				RequestId: "test-request-cross-tenant",
 				Method:    "GET",
 				Path:      "/api/test",
 			},

@@ -1,4 +1,4 @@
-.PHONY: build clean
+.PHONY: build clean test
 
 # Build the gateway binary to the bin folder
 build:
@@ -8,4 +8,8 @@ build:
 # Clean the bin folder
 clean:
 	rm -rf bin
+
+# Run all tests
+test:
+	go test ./...
 
