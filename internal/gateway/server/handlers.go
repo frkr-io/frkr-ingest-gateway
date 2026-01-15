@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	dbcommon "github.com/frkr-io/frkr-common/db"
 	"github.com/frkr-io/frkr-common/gateway"
+	"github.com/frkr-io/frkr-common/metrics"
 	ingestv1 "github.com/frkr-io/frkr-proto/go/ingest/v1"
 	"github.com/segmentio/kafka-go"
 )
@@ -16,31 +19,46 @@ import (
 // IngestHandler handles POST /ingest requests
 func (s *IngestGatewayServer) IngestHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		statusCode := http.StatusAccepted
+		streamID := ""
+
+		defer func() {
+			duration := time.Since(start).Seconds()
+			metrics.RecordIngestRequest(r.Method, "/ingest", strconv.Itoa(statusCode), duration)
+		}()
+
 		// TODO: Is there a better way to do this? Maybe HTTP method annotations that are enforced by middleware?
 		if r.Method != http.MethodPost {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			statusCode = http.StatusMethodNotAllowed
+			http.Error(w, "Method not allowed", statusCode)
 			return
 		}
 
 		// Check if we're ready
 		if !s.HealthChecker.IsReady() {
-			http.Error(w, "Service unavailable - dependencies not ready", http.StatusServiceUnavailable)
+			statusCode = http.StatusServiceUnavailable
+			http.Error(w, "Service unavailable - dependencies not ready", statusCode)
 			return
 		}
 
 		// Parse request
 		var req ingestv1.IngestRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, fmt.Sprintf("Invalid request: %v", err), http.StatusBadRequest)
+			statusCode = http.StatusBadRequest
+			http.Error(w, fmt.Sprintf("Invalid request: %v", err), statusCode)
 			return
 		}
+		streamID = req.StreamId
 
 		// Authenticate and authorize
 		ctx := r.Context()
 		_, err := gateway.AuthenticateHTTPRequest(ctx, r, s.AuthPlugin, s.SecretPlugin, req.StreamId, "write")
 		if err != nil {
 			log.Printf("Authentication failed: %v", err)
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			statusCode = http.StatusUnauthorized
+			metrics.RecordAuthFailure("frkr-ingest-gateway", "auth_failed")
+			http.Error(w, "Unauthorized", statusCode)
 			return
 		}
 
@@ -48,14 +66,16 @@ func (s *IngestGatewayServer) IngestHandler() http.HandlerFunc {
 		topic, err := dbcommon.GetStreamTopic(s.DB, req.StreamId)
 		if err != nil {
 			log.Printf("Failed to get stream topic: %v", err)
-			http.Error(w, "Stream not found", http.StatusNotFound)
+			statusCode = http.StatusNotFound
+			http.Error(w, "Stream not found", statusCode)
 			return
 		}
 
 		// Serialize request
 		messageData, err := json.Marshal(req.Request)
 		if err != nil {
-			http.Error(w, "Failed to serialize request", http.StatusInternalServerError)
+			statusCode = http.StatusInternalServerError
+			http.Error(w, "Failed to serialize request", statusCode)
 			return
 		}
 
@@ -73,7 +93,9 @@ func (s *IngestGatewayServer) IngestHandler() http.HandlerFunc {
 				log.Printf("Topic %s not found for stream %s, attempting to create it...", topic, req.StreamId)
 				if createErr := gateway.CreateTopicIfNotExists(s.BrokerURL, topic); createErr != nil {
 					log.Printf("Failed to create topic %s: %v", topic, createErr)
-					http.Error(w, fmt.Sprintf("Topic not found and creation failed: %v", createErr), http.StatusInternalServerError)
+					statusCode = http.StatusInternalServerError
+					metrics.RecordPublishError(streamID, "topic_creation_failed")
+					http.Error(w, fmt.Sprintf("Topic not found and creation failed: %v", createErr), statusCode)
 					return
 				}
 				// Retry the write
@@ -84,16 +106,23 @@ func (s *IngestGatewayServer) IngestHandler() http.HandlerFunc {
 				})
 				if err != nil {
 					log.Printf("Failed to write to broker after topic creation: %v", err)
-					http.Error(w, fmt.Sprintf("Failed to ingest request: %v", err), http.StatusInternalServerError)
+					statusCode = http.StatusInternalServerError
+					metrics.RecordPublishError(streamID, "write_retry_failed")
+					http.Error(w, fmt.Sprintf("Failed to ingest request: %v", err), statusCode)
 					return
 				}
 			} else {
-				http.Error(w, fmt.Sprintf("Failed to ingest request: %v", err), http.StatusInternalServerError)
+				statusCode = http.StatusInternalServerError
+				metrics.RecordPublishError(streamID, "write_failed")
+				http.Error(w, fmt.Sprintf("Failed to ingest request: %v", err), statusCode)
 				return
 			}
 		}
 
+		// Success
+		metrics.RecordMessagePublished(streamID)
 		w.WriteHeader(http.StatusAccepted)
 		_, _ = w.Write([]byte("OK"))
 	}
 }
+

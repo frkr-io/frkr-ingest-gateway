@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/frkr-io/frkr-common/gateway"
+	"github.com/frkr-io/frkr-common/metrics"
 	"github.com/frkr-io/frkr-common/plugins"
 	"github.com/segmentio/kafka-go"
 )
@@ -29,6 +30,10 @@ func NewIngestGatewayServer(
 	authPlugin plugins.AuthPlugin,
 	secretPlugin plugins.SecretPlugin,
 ) *IngestGatewayServer {
+	// Register ingest-specific metrics
+	metrics.RegisterIngestMetrics()
+	metrics.SetServiceInfo("frkr-ingest-gateway", "0.1.0")
+
 	return &IngestGatewayServer{
 		DB:            db,
 		Writer:        writer,
@@ -64,8 +69,12 @@ func (s *IngestGatewayServer) SetupHandlers(mux *http.ServeMux, cfg *gateway.Gat
 	// Register standard health endpoints
 	s.HealthChecker.RegisterHealthEndpoints(mux, cfg.HTTPPort, dbURL, s.BrokerURL)
 
+	// Register Prometheus metrics endpoint
+	mux.Handle("/metrics", metrics.Handler())
+
 	// Business endpoint
 	mux.HandleFunc("/ingest", s.IngestHandler())
 }
+
 
 
