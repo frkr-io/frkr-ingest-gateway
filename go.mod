@@ -4,7 +4,7 @@ go 1.25.5
 
 require (
 	github.com/frkr-io/frkr-common v0.3.0
-	github.com/frkr-io/frkr-proto v0.2.2
+	github.com/frkr-io/frkr-proto v0.3.0
 	github.com/segmentio/kafka-go v0.4.49
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.44.0

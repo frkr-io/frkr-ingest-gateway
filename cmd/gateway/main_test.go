@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -68,24 +69,30 @@ func TestIngestGateway_AuthenticatedRequest(t *testing.T) {
 
 	authPlugin := plugins.NewBasicAuthPlugin(testDB)
 
+	// Create a dummy TCP listener to simulate Kafka broker for health check
+	ln, err := net.Listen("tcp", "localhost:0")
+	require.NoError(t, err)
+	defer ln.Close()
+	dummyBrokerAddr := ln.Addr().String()
+
 	// Create mock Kafka writer (we'll write to a test topic)
 	// For now, we'll just verify the request is accepted
 	mockWriter := &kafka.Writer{
-		Addr:         kafka.TCP("localhost:9092"), // Won't actually connect in test
+		Addr:         kafka.TCP(dummyBrokerAddr), // Won't actually connect in test
 		Balancer:     &kafka.LeastBytes{},
 		WriteTimeout: 1 * time.Second,
 	}
 
 	healthChecker := gateway.NewGatewayHealthChecker("frkr-ingest-gateway", "0.1.0")
 	// Manually check dependencies to set ready state
-	healthChecker.CheckDependencies(testDB, "localhost:9092")
+	healthChecker.CheckDependencies(testDB, dummyBrokerAddr)
 
 	// Create server and get handler
-	srv := server.NewIngestGatewayServer(testDB, mockWriter, "localhost:9092", healthChecker, authPlugin, secretPlugin)
+	srv := server.NewIngestGatewayServer(testDB, mockWriter, dummyBrokerAddr, healthChecker, authPlugin, secretPlugin)
 	cfg := &gateway.GatewayBaseConfig{
 		HTTPPort: 8080,
 		DBURL:    "test",
-		BrokerURL: "localhost:9092",
+		BrokerURL: dummyBrokerAddr,
 	}
 	mux := http.NewServeMux()
 	srv.SetupHandlers(mux, cfg)
