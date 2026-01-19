@@ -48,8 +48,8 @@ github.com/ebitengine/purego v0.8.4 h1:CF7LEKg5FFOsASUj0+QwaXf8Ht6TlFxg09+S9wz0o
 github.com/ebitengine/purego v0.8.4/go.mod h1:iIjxzd6CiRiOG0UyXP+V1+jWqUXVjPKLAI0mRfJZTmQ=
 github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2Wg=
 github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
-github.com/frkr-io/frkr-common v0.3.1 h1:FAQHaHhY39TRhWhYfkJvRAL/G7fWzgi6aitdKhEOzmA=
-github.com/frkr-io/frkr-common v0.3.1/go.mod h1:jNHjRQEU9GwIkAprcS+RbpjGeEF1WWT1LaqUrEcupcE=
+github.com/frkr-io/frkr-common v0.3.3 h1:TfI8BRfXZ8H360F5PUmUze1UhE7OwmoPb07u9zqQ4f0=
+github.com/frkr-io/frkr-common v0.3.3/go.mod h1:jNHjRQEU9GwIkAprcS+RbpjGeEF1WWT1LaqUrEcupcE=
 github.com/frkr-io/frkr-proto v0.3.0 h1:ValTHewTBCOdZe30us4ui3rfSi8jp8VAqeXSqdr0+W8=
 github.com/frkr-io/frkr-proto v0.3.0/go.mod h1:yMh37VpaTi69+1j4/LRE4AtwrkcrGERNaLrKKMzBBYY=
 github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
